@@ -1,0 +1,96 @@
+CUDNN:
+  BENCHMARK: true
+  DETERMINISTIC: false
+  ENABLED: true
+
+BACKBONE: 'resnet'
+MODEL: 'faster_voxelpose'
+DEVICE: 'cuda:0'
+OUTPUT_DIR: 'output'
+LOG_DIR: 'log'
+WORKERS: 8
+PRINT_FREQ: 100
+
+DATASET:
+  DATADIR: "data/Hi4D/Hi4D_new"
+  COLOR_RGB: True
+  TRAIN_DATASET: 'hi4d'
+  TRAIN_HEATMAP_SRC: 'gt'
+  TEST_DATASET: 'hi4d'
+  TEST_HEATMAP_SRC: 'image'
+  CAMERA_NUM: 8
+  ORI_IMAGE_SIZE: 
+    - 940
+    - 1280
+  IMAGE_SIZE: 
+    - 608
+    - 800
+  HEATMAP_SIZE: 
+    - 64
+    - 76
+  NUM_JOINTS: 15
+  ROOT_JOINT_ID: 2
+
+SYNTHETIC:
+  CAMERA_FILE: 'calibration_hi4d.json'
+  POSE_FILE: '/home/feichi/myfiles/Faster_VoxelPose/Faster-VoxelPose/data/panoptic_training_pose.pkl'
+  MAX_PEOPLE: 10
+  NUM_DATA: 10000
+  DATA_AUGMENTATION: true
+
+NETWORK:
+  PRETRAINED_BACKBONE: "backbone/pose_resnet50_panoptic.pth.tar"
+  NUM_CHANNEL_JOINT_FEAT: 32
+  NUM_CHANNEL_JOINT_HIDDEN: 64
+  SIGMA: 3
+  BETA: 100
+
+TRAIN:
+  BATCH_SIZE: 1
+  SHUFFLE: true
+  BEGIN_EPOCH: 0
+  END_EPOCH: 20
+  RESUME: false
+  OPTIMIZER: adam
+  LR: 0.0001
+  LAMBDA_LOSS_2D: 1.0
+  LAMBDA_LOSS_1D: 1.0
+  LAMBDA_LOSS_BBOX: 0.1
+  LAMBDA_LOSS_FUSED: 5.0
+  VISUALIZATION: false
+  # VIS_TYPE: ['2d_planes', 'image_with_poses', 'heatmaps']
+  VIS_TYPE: ['heatmaps']
+
+
+TEST:
+  MODEL_FILE: 'model_best.pth.tar'
+  BATCH_SIZE: 4
+  VISUALIZATION: false
+  # VIS_TYPE: ['2d_planes', 'image_with_poses', 'heatmaps']
+  VIS_TYPE: ['heatmaps']
+
+CAPTURE_SPEC:
+  SPACE_SIZE:
+    - 8000.0
+    - 8000.0
+    - 2000.0
+  SPACE_CENTER:
+    - 100.0
+    - -100.0
+    - 800.0
+  VOXELS_PER_AXIS:
+    - 80
+    - 80
+    - 20
+  MAX_PEOPLE: 3
+  MIN_SCORE: 0.1
+  
+INDIVIDUAL_SPEC:
+  SPACE_SIZE:
+    - 2000.0
+    - 2000.0
+    - 2000.0
+  VOXELS_PER_AXIS:
+    - 64
+    - 64
+    - 64

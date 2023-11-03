@@ -92,6 +92,8 @@ def main():
     with torch.no_grad():
         all_fused_poses = []
         for i, (inputs, _, meta, input_heatmaps) in enumerate(tqdm(test_loader)):
+            if i > 3:
+                continue
             if config.DATASET.TEST_HEATMAP_SRC == 'image':
                 inputs = inputs.to(config.DEVICE)
                 fused_poses, plane_poses, proposal_centers, input_heatmaps, _ = model(backbone=backbone, views=inputs, 

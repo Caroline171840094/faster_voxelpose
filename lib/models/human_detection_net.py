@@ -83,7 +83,6 @@ class HumanDetectionNet(nn.Module):
         # generate 2d proposals
         proposal_heatmaps_2d, bbox_preds = self.center_net(feature_cubes)
         topk_2d_confs, topk_2d_index, topk_2d_flatten_index = nms2D(proposal_heatmaps_2d.detach(), self.max_people) 
-        
         # extract the matched bbox predictions
         bbox_preds = torch.flatten(bbox_preds, 2, 3).permute(0, 2, 1)
         match_bbox_preds = torch.gather(bbox_preds, dim=1, index=topk_2d_flatten_index.unsqueeze(2).repeat(1, 1, 2))

@@ -92,6 +92,7 @@ class Synthetic(JointsDataset):
             joints_3d_vis = np.array([p['vis'][:, -1] for p in select_poses])
 
             for n in range(nposes):
+                import ipdb;ipdb.set_trace()
                 assert len(joints_3d[n]) == self.num_joints, "inconsistent number of joints"
                 points = joints_3d[n][:, :2].copy()
                 if isinstance(self.root_id, int):

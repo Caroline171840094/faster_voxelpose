@@ -12,19 +12,21 @@ ori_image_size_list = {
     'Panoptic': [1920, 1080],
     'Shelf': [1032, 776],
     'Campus': [360, 288],
+    "hi4d": [940, 1280],
 }
 
 image_size_list = {
     'Panoptic': [960, 512],
     'Shelf': [800, 608],
     'Campus': [800, 640],
+    'hi4d': [608, 800],
 }
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Preprocess the dataset')
     parser.add_argument('--dataset', help='please specify the name of the dataset', 
-                        choices=['Panoptic', 'Shelf', 'Campus'],
+                        choices=['Panoptic', 'Shelf', 'Campus', 'hi4d'],
                         required=True, type=str)
     args, _ = parser.parse_known_args()
     return args
@@ -43,9 +45,9 @@ def preprocess_panoptic(image_size, trans):
     cam_list = [(0, 3), (0, 6), (0, 12), (0, 13), (0, 23)]
 
     TRAIN_LIST = [
-        '160422_ultimatum1', '160224_haggling1', '160226_haggling1',
-        '161202_haggling1', '160906_ian1', '160906_ian2',
-        '160906_ian3', '160906_band1', '160906_band2',# '160906_band3',
+        # '160422_ultimatum1', '160224_haggling1', '160226_haggling1',
+        # '161202_haggling1', '160906_ian1', '160906_ian2', '160906_ian3','160906_band2',
+         '160906_band1',# '160906_band3',
     ]
     VAL_LIST = ['160906_pizza1', '160422_haggling1', '160906_ian5', '160906_band4']
 
@@ -108,6 +110,28 @@ def preprocess_shelf(image_size, trans):
                 resized_image = cv2.warpAffine(image, trans, (int(image_size[0]), int(image_size[1])),
                                             flags=cv2.INTER_LINEAR)
                 cv2.imwrite(image_path, resized_image)
+                
+def preprocess_hi4d(image_size, trans):
+    data_dir = 'data/Hi4D/Hi4D_new'
+
+    print("=> Start preprocessing the Hi4D dataset")
+    seqs = glob.glob(f"{data_dir}/pair*")
+    cams = ['4', '16', '28', '40', '52', '64', '76', '88']
+    for seq in seqs:
+        print("=> Start preprocessing the sequence: {}".format(seq))
+        for cam in cams:
+            os.makedirs(os.path.join(seq, "images_resized", cam), exist_ok=True)
+            image_paths = glob.glob(os.path.join(seq, 'images', cam, '*.jpg'))
+            for image_path in image_paths:
+                image_out_path = image_path.replace("images", "images_resized")
+                image = cv2.imread(image_path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+                
+                # resize the image
+                if image.shape[0] != image_size[1] or image.shape[1] != image_size[0]:
+                    resized_image = cv2.warpAffine(image, trans, (int(image_size[0]), int(image_size[1])),
+                                                flags=cv2.INTER_LINEAR)
+                    cv2.imwrite(image_out_path, resized_image)
+            
 
 
 def preprocess_campus(image_size, trans):
@@ -142,3 +166,5 @@ if __name__ == '__main__':
         preprocess_shelf(image_size, trans)
     elif args.dataset == 'Campus':
         preprocess_campus(image_size, trans)
+    elif args.dataset == 'hi4d':
+        preprocess_hi4d(image_size, trans)

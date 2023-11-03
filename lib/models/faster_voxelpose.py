@@ -38,7 +38,6 @@ class FasterVoxelPoseNet(nn.Module):
             input_heatmaps = torch.stack([backbone(views[:, c]) for c in range(num_views)], dim=1)
         
         batch_size = input_heatmaps.shape[0]
- 
         # human detection network
         proposal_heatmaps_2d, proposal_heatmaps_1d, proposal_centers, \
                               bbox_preds = self.pose_net(input_heatmaps, meta, cameras, resize_transform)

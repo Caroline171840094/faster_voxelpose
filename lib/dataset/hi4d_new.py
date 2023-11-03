@@ -8,6 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os.path as osp
+import glob
 import numpy as np
 import json_tricks as json
 import pickle
@@ -17,29 +18,38 @@ import copy
 import os
 import cv2
 from collections import OrderedDict
-
+from utils.hi4d_cam_utils import read_cameras
 from dataset.JointsDataset import JointsDataset
 
 logger = logging.getLogger(__name__)
 
-shelf_joints_def = {
-    'Right-Ankle': 0,
-    'Right-Knee': 1,
-    'Right-Hip': 2,
-    'Left-Hip': 3,
-    'Left-Knee': 4,
-    'Left-Ankle': 5,
-    'Right-Wrist': 6,
-    'Right-Elbow': 7,
-    'Right-Shoulder': 8,
-    'Left-Shoulder': 9,
-    'Left-Elbow': 10,
-    'Left-Wrist': 11,
-    'Bottom-Head': 12,
-    'Top-Head': 13
-}
 
-shelf_bones_def = [
+VAL_LIST = [
+    'pair00_taichi00',
+    'pair00_yoga00',
+    'pair01_hug01',
+    'pair01_talk01',
+    'pair02_pose02',
+]
+
+hi4d_joints_def = {
+    'neck': 0,
+    'nose': 1,
+    'mid-hip': 2,
+    'l-shoulder': 3,
+    'l-elbow': 4,
+    'l-wrist': 5,
+    'l-hip': 6,
+    'l-knee': 7,
+    'l-ankle': 8,
+    'r-shoulder': 9,
+    'r-elbow': 10,
+    'r-wrist': 11,
+    'r-hip': 12,
+    'r-knee': 13,
+    'r-ankle': 14,
+}
+hi4d_bones_def = [
     [13, 12],  # head
     [12, 9], [9, 10], [10, 11],  # left arm
     [12, 8], [8, 7], [7, 6],  # right arm
@@ -47,6 +57,9 @@ shelf_bones_def = [
     [3, 4], [4, 5],  # left leg
     [2, 1], [1, 0],  # right leg
 ]
+hi4d_to_panoptic = [1,4,0,6,12,16,3,8,14, 5,11,15,2,7,13]
+# hi4d_to_shelf = [13, 7, 2, 3, 8, 14, 15, 11, 5, 6, 12, 16, 1, 4]
+hi4d_to_coco = []
 
 coco_joints_def = {
     0: 'nose',
@@ -70,16 +83,18 @@ coco_bones_def = [
 ]
 
 
-class Shelf(JointsDataset):
+class Hi4D(JointsDataset):
     def __init__(self, cfg, is_train=True, transform=None):
         super().__init__(cfg, is_train, transform)
 
-        self.num_joints = len(shelf_joints_def)
+        self.num_joints = len(hi4d_joints_def)
         self.num_views = cfg.DATASET.CAMERA_NUM
-
         self.has_evaluate_function = True
-        self.frame_range = list(range(300, 601)) 
-        self.pred_pose2d = self._get_pred_pose2d()
+        # self.pred_pose2d = self._get_pred_pose2d()
+        self.frame_range = list(range(3, 103))
+        self.sequence_list = VAL_LIST
+        self._interval = 4
+        self.cam_list = ['4', '16', '28', '40', '52', '64', '76', '88']
         self.cameras = self._get_cam()
         self._get_db()
 
@@ -91,67 +106,74 @@ class Shelf(JointsDataset):
         return pred_2d
 
     def _get_db(self):
-        datafile = os.path.join(self.dataset_dir, 'actorsGT.mat')
-        actor_3d = scio.loadmat(datafile)['actor3D']
-        actor_3d = np.array(np.array(actor_3d.tolist()).tolist(), dtype=object).squeeze()
-        num_person = len(actor_3d)
-
-        for i in self.frame_range:
-            all_image_path, all_preds, all_poses_3d, all_poses_3d_vis = [], [], [], []
-
-            for person in range(num_person):
-                import ipdb; ipdb.set_trace()
-                pose3d = actor_3d[person][i] * 1000.0
-                if len(pose3d[0]) > 0:
-                    all_poses_3d.append(pose3d)
-                    all_poses_3d_vis.append(np.ones(self.num_joints))
+        for seq in self.sequence_list:
+            curr_anno = osp.join(self.dataset_dir, seq, 'skel19_gt')
+            anno_files = sorted(glob.iglob('{:s}/*.json'.format(curr_anno)))
+            for i, anno_file in enumerate(anno_files):
+                if i % self._interval == 0:
+                    with open(anno_file, "r") as f:
+                        data_kpts = json.load(f)
+                    if len(data_kpts) == 0:
+                        continue
+                    
+                    all_image_path = []
+                    missing_image = False
+                    framename = osp.basename(anno_file).replace("json", 'jpg')
+                    for k in range(self.num_views):
+                        image_path = osp.join(self.dataset_dir, seq, "images_resized", self.cam_list[k], framename)
+                        if not osp.exists(image_path):
+                            logger.info("Image not found: {}. Skipped.".format(image_path))
+                            missing_image = True
+                            break
+                        all_image_path.append(image_path)
+                        
+                    
+                    if missing_image:
+                        continue
                 
-            missing_image = False
-            for k in range(self.num_views):
-                image_path = osp.join(self.dataset_dir, "Camera{}".format(k), "img_{:06d}.png".format(i))
-                if not osp.exists(image_path):
-                    logger.info("Image not found: {}. Skipped.".format(image_path))
-                    missing_image = True
-                    break
-                all_image_path.append(image_path)
+                    all_poses_3d = []
+                    all_poses_3d_vis = []
+                    for kpts in data_kpts:
+                        pose3d = np.array(kpts['keypoints3d']).reshape((-1, 3))
+                        pose3d = pose3d[hi4d_to_panoptic, :]
+                        pose3d = pose3d[:self.num_joints]
 
-                # save all 2D pred results
-                pred_index = '{}_{}'.format(k, i)
-                preds = self.pred_pose2d[pred_index]
-                preds = [np.array(p["pred"]) for p in preds]
-                all_preds.append(preds)
-            
-            if missing_image:
-                continue
+                        joints_vis = np.ones_like(pose3d[:, -1])
+                        # ignore the joints with visibility less than 0.1
 
-            self.db.append({
-                'seq': 'shelf',
-                'all_image_path': all_image_path,
-                'pred_pose2d': all_preds,
-                'joints_3d': all_poses_3d,
-                'joints_3d_vis': all_poses_3d_vis
-            })
-
+                        all_poses_3d.append(pose3d[:, 0:3] * 1000.0)
+                        all_poses_3d_vis.append(joints_vis)
+                        
+                    if len(all_poses_3d) > 0:
+                        self.db.append({
+                            'seq': seq,
+                            'all_image_path': all_image_path,
+                            'joints_3d': all_poses_3d,
+                            'joints_3d_vis': all_poses_3d_vis,
+                        })
         super()._rebuild_db()
         logger.info("=> {} images from {} views loaded".format(len(self.db), self.num_views))
         return
 
     def _get_cam(self):
-        cam_file = osp.join(self.dataset_dir, "calibration_shelf.json")
-        with open(cam_file) as cfile:
-            cameras = json.load(cfile)
-
-        for id, cam in cameras.items():
-            for k, v in cam.items():
-                cameras[id][k] = np.array(v)
-        
-        cameras_int_key = {}
-        for id, cam in cameras.items():
-            cameras_int_key[int(id)] = cam
-
-        our_cameras = dict()
-        our_cameras['shelf'] = cameras_int_key
-        return our_cameras
+        cameras = dict()
+        for seq in self.sequence_list:
+            cameras[seq] = []
+            cams_dict = read_cameras(osp.join(self.dataset_dir, seq))
+            cams_new = []
+            for cam in self.cam_list:
+                cam_info = {}
+                cam_info['R'] = cams_dict[cam]['R']
+                cam_info['T'] = cams_dict[cam]['T'] *1000
+                cam_info['fx'] = cams_dict[cam]['K'][0, 0]
+                cam_info['fy'] = cams_dict[cam]['K'][1, 1]
+                cam_info['cx'] = cams_dict[cam]['K'][0, 2]
+                cam_info['cy'] = cams_dict[cam]['K'][1, 2]
+                cam_info['k'] = cams_dict[cam]['dist'][0, [0, 1, 4]].reshape(3, 1)
+                cam_info['p'] = cams_dict[cam]['dist'][0, [2, 3]].reshape(2, 1)
+                cams_new.append(cam_info)
+            cameras[seq] = cams_new
+        return cameras
 
     def __getitem__(self, idx):
         input, target, meta, input_heatmap = super().__getitem__(idx)
@@ -161,10 +183,7 @@ class Shelf(JointsDataset):
         return len(self.db)
 
     def evaluate(self, preds, recall_threshold=500):
-        datafile = os.path.join(self.dataset_dir, 'actorsGT.mat')
-        actor_3d = scio.loadmat(datafile)['actor3D']
-        actor_3d = np.array(np.array(actor_3d.tolist()).tolist(), dtype=object).squeeze()
-        num_person = len(actor_3d)
+        num_person = 2
         total_gt = 0
         match_gt = 0
 
@@ -175,9 +194,10 @@ class Shelf(JointsDataset):
         bone_correct_parts = np.zeros((num_person, 10))
 
         for i, fi in enumerate(self.frame_range):
-            pred_coco = preds[i].detach().cpu().numpy()
-            pred_coco = pred_coco[pred_coco[:, 0, 3] >= 0, :, :3]
-            pred = np.stack([self.coco2shelf3D(p) for p in copy.deepcopy(pred_coco[:, :, :3])])
+            pred_15 = preds[i].detach().cpu().numpy()
+            pred_15 = pred_15[pred_15[:, 0, 3] >= 0, :, :3]
+            import ipdb;ipdb.set_trace()
+            pred = np.stack([self.coco2shelf3D(p) for p in copy.deepcopy(pred_15[:, :, :3])])
 
             for person in range(num_person):
                 gt = actor_3d[person][fi] * 1000.0
@@ -220,9 +240,9 @@ class Shelf(JointsDataset):
             bone_person_pcp[k] = np.sum(bone_correct_parts[:, v], axis=-1) / (total_parts / 10 * len(v) + 1e-8)
         
         recall = match_gt / (total_gt + 1e-8)
-        msg = '     | Actor 1 | Actor 2 | Actor 3 | Average | \n' \
-              ' PCP |  {pcp_1:.2f}  |  {pcp_2:.2f}  |  {pcp_3:.2f}  |  {pcp_avg:.2f}  |\t Recall@500mm: {recall:.4f}'.format(
-                pcp_1=actor_pcp[0]*100, pcp_2=actor_pcp[1]*100, pcp_3=actor_pcp[2]*100, pcp_avg=avg_pcp*100, recall=recall)
+        msg = '     | Actor 1 | Actor 2 | Average | \n' \
+              ' PCP |  {pcp_1:.2f}  |  {pcp_2:.2f}  |  {pcp_avg:.2f}  |\t Recall@500mm: {recall:.4f}'.format(
+                pcp_1=actor_pcp[0]*100, pcp_2=actor_pcp[1]*100, pcp_avg=avg_pcp*100, recall=recall)
         metric = np.mean(avg_pcp)
 
         return metric, msg

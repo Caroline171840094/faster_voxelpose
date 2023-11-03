@@ -64,6 +64,7 @@ def get_data_loaders(config):
             transforms.ToTensor(),
             normalize,
         ]))
+    train_dataset[0]
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,

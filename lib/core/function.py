@@ -33,7 +33,6 @@ def train(config, backbone, model, optimizer, loader, epoch, output_dir, writer_
     # loading constants of the dataset
     cameras = loader.dataset.cameras
     resize_transform = torch.as_tensor(loader.dataset.resize_transform, dtype=torch.float, device=config.DEVICE)
-
     for i, (inputs, targets, meta, input_heatmaps) in enumerate(loader):
         if config.DATASET.TEST_HEATMAP_SRC == 'image':
             inputs = inputs.to(config.DEVICE)

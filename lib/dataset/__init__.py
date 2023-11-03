@@ -11,3 +11,5 @@ from dataset.synthetic import Synthetic as synthetic
 from dataset.panoptic import Panoptic as panoptic
 from dataset.shelf import Shelf as shelf
 from dataset.campus import Campus as campus
+from dataset.hi4d import Hi4D as hi4d
+
